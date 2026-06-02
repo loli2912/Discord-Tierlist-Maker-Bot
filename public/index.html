@@ -362,10 +362,6 @@
 <div id="setup">
   <h2>Connect your Discord server</h2>
   <div class="field">
-    <label>Bot Token</label>
-    <input type="password" id="token-input" placeholder="Paste your bot token..." autocomplete="off" />
-  </div>
-  <div class="field">
     <label>Guild (Server) ID</label>
     <input type="text" id="guild-input" placeholder="Right-click your server → Copy Server ID" autocomplete="off" />
   </div>
@@ -655,40 +651,39 @@
 
   // ── Load members ──
   async function loadMembers() {
-    const token = document.getElementById('token-input').value.trim();
     const guildId = document.getElementById('guild-input').value.trim();
     const errEl = document.getElementById('error-msg');
     const spinner = document.getElementById('spinner');
     const btn = document.getElementById('load-btn');
 
     errEl.style.display = 'none';
-    if (!token || !guildId) {
-      errEl.textContent = 'Please fill in both fields.';
+    if (!guildId) {
+      errEl.textContent = 'Please enter a Guild ID.';
       errEl.style.display = 'block';
       return;
     }
 
     btn.disabled = true;
     spinner.style.display = 'block';
-    spinner.textContent = 'Validating token…';
+    spinner.textContent = 'Connecting…';
 
     try {
       const tokenRes = await fetch('/api/test-token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token })
+        body: JSON.stringify({})
       });
       const tokenData = await tokenRes.json();
       if (!tokenRes.ok) {
-        throw new Error('Invalid bot token. Go to Discord Developer Portal → your app → Bot → Reset Token, copy the new one, and paste it here.');
+        throw new Error(tokenData.error || 'Bot token is invalid or not configured on the server.');
       }
 
-      spinner.textContent = `Token OK (bot: ${tokenData.username}). Loading members…`;
+      spinner.textContent = `Connected (bot: ${tokenData.username}). Loading members…`;
 
       const res = await fetch('/api/members', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, guildId })
+        body: JSON.stringify({ guildId })
       });
       const data = await res.json();
 
@@ -841,10 +836,8 @@
     e.target.value = ''; // reset so same file can be re-selected
   });
 
-  ['token-input', 'guild-input'].forEach(id => {
-    document.getElementById(id).addEventListener('keydown', e => {
-      if (e.key === 'Enter') loadMembers();
-    });
+  document.getElementById('guild-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') loadMembers();
   });
 </script>
 </body>

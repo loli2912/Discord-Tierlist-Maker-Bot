@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const fetch = require('node-fetch');
 const path = require('path');
@@ -10,8 +11,8 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // Validate token alone before fetching members
 app.post('/api/test-token', async (req, res) => {
-  const { token } = req.body;
-  if (!token) return res.status(400).json({ error: 'token is required' });
+  const token = process.env.BOT_TOKEN;
+  if (!token) return res.status(500).json({ error: 'BOT_TOKEN is not configured on the server.' });
 
   const response = await fetch('https://discord.com/api/v10/users/@me', {
     headers: { Authorization: `Bot ${token}` }
@@ -25,10 +26,12 @@ app.post('/api/test-token', async (req, res) => {
 });
 
 app.post('/api/members', async (req, res) => {
-  const { token, guildId } = req.body;
+  const token = process.env.BOT_TOKEN;
+  const { guildId } = req.body;
 
-  if (!token || !guildId) {
-    return res.status(400).json({ error: 'token and guildId are required' });
+  if (!token) return res.status(500).json({ error: 'BOT_TOKEN is not configured on the server.' });
+  if (!guildId) {
+    return res.status(400).json({ error: 'guildId is required' });
   }
 
   try {
