@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Discord Tierlist Maker</title>
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #0d0d1a;
+      color: #e0e0e0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 16px;
+    }
+
+    h1 {
+      font-size: 1.6rem;
+      font-weight: 700;
+      margin-bottom: 20px;
+      letter-spacing: 1px;
+      color: #fff;
+    }
+
+    /* ── Setup panel ── */
+    #setup {
+      background: #1a1a2e;
+      border: 1px solid #2e2e4a;
+      border-radius: 12px;
+      padding: 24px 28px;
+      width: 100%;
+      max-width: 480px;
+      margin-bottom: 28px;
+    }
+
+    #setup h2 { font-size: 1rem; margin-bottom: 16px; color: #a0a0c0; }
+
+    .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+    .field label { font-size: 0.8rem; color: #888; }
+    .field input {
+      background: #0d0d1a;
+      border: 1px solid #2e2e4a;
+      border-radius: 8px;
+      padding: 10px 14px;
+      color: #e0e0e0;
+      font-size: 0.9rem;
+      outline: none;
+      transition: border-color .2s;
+    }
+    .field input:focus { border-color: #5865f2; }
+
+    #load-btn {
+      width: 100%;
+      padding: 11px;
+      background: #5865f2;
+      border: none;
+      border-radius: 8px;
+      color: #fff;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .2s;
+    }
+    #load-btn:hover { background: #4752c4; }
+    #load-btn:disabled { background: #3a3a5c; cursor: not-allowed; }
+
+    #error-msg {
+      margin-top: 12px;
+      color: #ff6b6b;
+      font-size: 0.85rem;
+      display: none;
+    }
+
+    /* ── Main content ── */
+    #main { width: 100%; max-width: 960px; display: none; }
+
+    /* ── Tierlist wrapper (tierlist + controls column side by side) ── */
+    #tierlist-wrap {
+      display: flex;
+      align-items: stretch;
+      gap: 0;
+      margin-bottom: 8px;
+    }
+
+    /* ── Tierlist ── */
+    #tierlist {
+      flex: 1;
+      background: #1a1a2e;
+      border-radius: 12px 0 0 12px;
+      overflow: hidden;
+    }
+
+    .tier-row {
+      display: flex;
+      align-items: stretch;
+      border-bottom: 1px solid #0d0d1a;
+      min-height: 80px;
+    }
+    .tier-row:last-child { border-bottom: none; }
+
+    /* ── Editable label ── */
+    .tier-label {
+      width: 64px;
+      min-width: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.4rem;
+      font-weight: 800;
+      color: #fff;
+      text-shadow: 0 1px 4px rgba(0,0,0,.5);
+      flex-shrink: 0;
+      cursor: text;
+      outline: none;
+      transition: filter .15s;
+      /* prevent newlines in contenteditable */
+      white-space: nowrap;
+      overflow: hidden;
+    }
+    .tier-label:focus {
+      filter: brightness(1.25);
+      outline: 2px solid rgba(255,255,255,.4);
+      outline-offset: -2px;
+    }
+    .tier-label[data-light="true"] { color: #111; text-shadow: none; }
+
+    .tier-items {
+      flex: 1;
+      display: flex;
+      flex-wrap: wrap;
+      align-content: flex-start;
+      gap: 6px;
+      padding: 8px;
+      min-height: 80px;
+    }
+
+    /* ── Controls column (outside tierlist so excluded from screenshot) ── */
+    #controls-col {
+      display: flex;
+      flex-direction: column;
+      background: #12122a;
+      border-radius: 0 12px 12px 0;
+      border-left: 1px solid #0d0d1a;
+      overflow: hidden;
+    }
+
+    .row-ctrl {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      flex: 1;
+      padding: 4px 6px;
+      border-bottom: 1px solid #0d0d1a;
+      min-height: 80px;
+    }
+    .row-ctrl:last-child { border-bottom: none; }
+
+    .ctrl-btn {
+      width: 26px;
+      height: 22px;
+      background: #1e1e3a;
+      border: 1px solid #2e2e5a;
+      border-radius: 5px;
+      color: #8888bb;
+      font-size: 0.65rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background .15s, color .15s;
+      line-height: 1;
+      padding: 0;
+    }
+    .ctrl-btn:hover { background: #2e2e5a; color: #fff; }
+    .ctrl-btn.del { color: #ff6b6b; border-color: #4a2020; }
+    .ctrl-btn.del:hover { background: #4a2020; color: #ff9999; }
+
+    /* ── Add row button ── */
+    #add-row-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 20px;
+      padding: 7px 16px;
+      background: #1a1a2e;
+      border: 1px dashed #3a3a6a;
+      border-radius: 8px;
+      color: #6666aa;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: border-color .15s, color .15s;
+      align-self: flex-start;
+    }
+    #add-row-btn:hover { border-color: #5865f2; color: #8899ff; }
+
+    /* ── Avatar tile ── */
+    .avatar-tile {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      cursor: grab;
+      user-select: none;
+      transition: transform .1s;
+    }
+    .avatar-tile:active { cursor: grabbing; }
+    .avatar-tile:hover { transform: scale(1.08); }
+
+    .avatar-tile img {
+      width: 64px;
+      height: 64px;
+      border-radius: 8px;
+      object-fit: cover;
+      border: 2px solid transparent;
+      transition: border-color .15s;
+      display: block;
+    }
+    .avatar-tile:hover img { border-color: #5865f2; }
+
+    .avatar-tile span {
+      font-size: 0.65rem;
+      color: #aaa;
+      max-width: 68px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      text-align: center;
+    }
+
+    .sortable-ghost { opacity: 0.35; }
+    .sortable-chosen { transform: scale(1.1); }
+
+    /* ── Pool ── */
+    #pool-section { margin-top: 8px; }
+
+    #pool-header {
+      font-size: 0.75rem;
+      color: #666;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 8px;
+    }
+
+    #pool {
+      background: #12122a;
+      border: 1px dashed #2e2e4a;
+      border-radius: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding: 10px;
+      min-height: 90px;
+      align-content: flex-start;
+    }
+
+    /* ── Toolbar ── */
+    #toolbar {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .toolbar-btn {
+      padding: 9px 20px;
+      border-radius: 8px;
+      border: none;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .2s;
+    }
+
+    #save-btn { background: #5865f2; color: #fff; }
+    #save-btn:hover { background: #4752c4; }
+
+    #reset-btn { background: #2e2e4a; color: #aaa; }
+    #reset-btn:hover { background: #3a3a5c; color: #fff; }
+
+    #export-data-btn { background: #1e3a2e; color: #6dbf8a; border: 1px solid #2e5a3e; }
+    #export-data-btn:hover { background: #2a4a3a; color: #8fd4a8; }
+
+    /* ── Setup divider + file load ── */
+    .setup-divider {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 18px 0 16px;
+      color: #3a3a5a;
+      font-size: 0.8rem;
+    }
+    .setup-divider::before,
+    .setup-divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: #2e2e4a;
+    }
+
+    #file-load-btn {
+      width: 100%;
+      padding: 11px;
+      background: #12122a;
+      border: 1px dashed #3a3a6a;
+      border-radius: 8px;
+      color: #6666aa;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: border-color .2s, color .2s;
+    }
+    #file-load-btn:hover { border-color: #5865f2; color: #8899ff; }
+
+    /* ── Loading spinner ── */
+    #spinner {
+      display: none;
+      margin-top: 12px;
+      font-size: 0.85rem;
+      color: #888;
+    }
+
+    /* ── Color picker popup ── */
+    #color-picker {
+      position: fixed;
+      display: none;
+      gap: 6px;
+      flex-wrap: wrap;
+      background: #1a1a2e;
+      border: 1px solid #3a3a6a;
+      border-radius: 10px;
+      padding: 10px;
+      z-index: 999;
+      width: 138px;
+      box-shadow: 0 4px 20px rgba(0,0,0,.5);
+    }
+    #color-picker.visible { display: flex; }
+
+    .color-swatch {
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      cursor: pointer;
+      border: 2px solid transparent;
+      transition: transform .1s, border-color .1s;
+    }
+    .color-swatch:hover { transform: scale(1.15); border-color: #fff; }
+  </style>
+</head>
+<body>
+
+<h1>Discord Tierlist Maker</h1>
+
+<!-- Setup -->
+<div id="setup">
+  <h2>Connect your Discord server</h2>
+  <div class="field">
+    <label>Bot Token</label>
+    <input type="password" id="token-input" placeholder="Paste your bot token..." autocomplete="off" />
+  </div>
+  <div class="field">
+    <label>Guild (Server) ID</label>
+    <input type="text" id="guild-input" placeholder="Right-click your server → Copy Server ID" autocomplete="off" />
+  </div>
+  <button id="load-btn">Load Members</button>
+  <div id="spinner">Loading members…</div>
+  <div id="error-msg"></div>
+
+  <div class="setup-divider">or</div>
+  <button id="file-load-btn">📂 Load saved tierlist…</button>
+  <input type="file" id="file-input" accept=".json" style="display:none" />
+</div>
+
+<!-- Color picker popup -->
+<div id="color-picker"></div>
+
+<!-- Main tierlist (hidden until loaded) -->
+<div id="main">
+  <div id="toolbar">
+    <button class="toolbar-btn" id="save-btn">Save / Download</button>
+    <button class="toolbar-btn" id="export-data-btn">Export Data</button>
+    <button class="toolbar-btn" id="reset-btn">Reset All</button>
+  </div>
+
+  <div id="tierlist-wrap">
+    <div id="tierlist"></div>
+    <div id="controls-col"></div>
+  </div>
+
+  <button id="add-row-btn">＋ Add Row</button>
+
+  <div id="pool-section">
+    <div id="pool-header">Unranked</div>
+    <div id="pool"></div>
+  </div>
+</div>
+
+<script>
+  // ── State ──
+  const DEFAULT_TIERS = [
+    { label: 'S', color: '#ff4444' },
+    { label: 'A', color: '#ff8c00' },
+    { label: 'B', color: '#ffd700' },
+    { label: 'C', color: '#7fbf7f' },
+    { label: 'D', color: '#4a9eff' },
+    { label: 'F', color: '#7c7caa' },
+  ];
+
+  const COLOR_PALETTE = [
+    '#ff4444','#ff6b35','#ff8c00','#ffd700','#c8e000',
+    '#7fbf7f','#4a9eff','#7c7caa','#d46be0','#e06090',
+    '#ffffff','#aaaaaa','#555577',
+  ];
+
+  let tiers = DEFAULT_TIERS.map((t, i) => ({ ...t, id: i }));
+  let nextId = tiers.length;
+  let sortables = [];
+  let colorTargetId = null;
+  let allMembers = [];
+
+  // ── Light-color detection (use dark text on bright backgrounds) ──
+  function isLight(hex) {
+    const r = parseInt(hex.slice(1,3),16);
+    const g = parseInt(hex.slice(3,5),16);
+    const b = parseInt(hex.slice(5,7),16);
+    return (r*299 + g*587 + b*114) / 1000 > 155;
+  }
+
+  // ── Render tierlist rows ──
+  function renderTiers() {
+    const tierlistEl = document.getElementById('tierlist');
+    const ctrlCol = document.getElementById('controls-col');
+
+    // Collect items currently in each tier row by id
+    const saved = {};
+    tierlistEl.querySelectorAll('.tier-row').forEach(row => {
+      const id = row.dataset.tierId;
+      saved[id] = Array.from(row.querySelector('.tier-items').children);
+    });
+
+    tierlistEl.innerHTML = '';
+    ctrlCol.innerHTML = '';
+
+    tiers.forEach((tier, idx) => {
+      // Row
+      const row = document.createElement('div');
+      row.className = 'tier-row';
+      row.dataset.tierId = tier.id;
+
+      const label = document.createElement('div');
+      label.className = 'tier-label';
+      label.contentEditable = 'true';
+      label.textContent = tier.label;
+      label.style.background = tier.color;
+      label.dataset.light = isLight(tier.color);
+      if (isLight(tier.color)) label.style.color = '#111';
+      else label.style.color = '#fff';
+
+      label.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); label.blur(); }
+      });
+      label.addEventListener('blur', () => {
+        tier.label = label.textContent.trim() || tier.label;
+        label.textContent = tier.label;
+      });
+      label.addEventListener('click', e => {
+        e.stopPropagation();
+        showColorPicker(tier.id, label);
+      });
+
+      const items = document.createElement('div');
+      items.className = 'tier-items';
+      items.dataset.tierId = tier.id;
+
+      // Restore saved items for this tier
+      if (saved[tier.id]) {
+        saved[tier.id].forEach(el => items.appendChild(el));
+      }
+
+      row.appendChild(label);
+      row.appendChild(items);
+      tierlistEl.appendChild(row);
+
+      // Controls
+      const ctrl = document.createElement('div');
+      ctrl.className = 'row-ctrl';
+      ctrl.dataset.tierId = tier.id;
+
+      const upBtn = document.createElement('button');
+      upBtn.className = 'ctrl-btn';
+      upBtn.title = 'Move up';
+      upBtn.textContent = '▲';
+      upBtn.addEventListener('click', () => moveRow(tier.id, -1));
+
+      const delBtn = document.createElement('button');
+      delBtn.className = 'ctrl-btn del';
+      delBtn.title = 'Delete row';
+      delBtn.textContent = '✕';
+      delBtn.addEventListener('click', () => deleteRow(tier.id));
+
+      const downBtn = document.createElement('button');
+      downBtn.className = 'ctrl-btn';
+      downBtn.title = 'Move down';
+      downBtn.textContent = '▼';
+      downBtn.addEventListener('click', () => moveRow(tier.id, 1));
+
+      ctrl.appendChild(upBtn);
+      ctrl.appendChild(delBtn);
+      ctrl.appendChild(downBtn);
+      ctrlCol.appendChild(ctrl);
+    });
+
+    initSortables();
+  }
+
+  // ── Move row up (-1) or down (+1) ──
+  function moveRow(id, dir) {
+    const idx = tiers.findIndex(t => t.id === id);
+    const newIdx = idx + dir;
+    if (newIdx < 0 || newIdx >= tiers.length) return;
+
+    // Save item state before re-render
+    saveItemState();
+
+    [tiers[idx], tiers[newIdx]] = [tiers[newIdx], tiers[idx]];
+    renderTiers();
+  }
+
+  // ── Delete row: send items back to pool ──
+  function deleteRow(id) {
+    const pool = document.getElementById('pool');
+    const row = document.querySelector(`.tier-row[data-tier-id="${id}"]`);
+    if (row) {
+      Array.from(row.querySelector('.tier-items').children).forEach(tile => pool.appendChild(tile));
+    }
+    tiers = tiers.filter(t => t.id !== id);
+    renderTiers();
+  }
+
+  // ── Add new row ──
+  function addRow() {
+    const usedColors = tiers.map(t => t.color);
+    const color = COLOR_PALETTE.find(c => !usedColors.includes(c)) || COLOR_PALETTE[nextId % COLOR_PALETTE.length];
+    tiers.push({ label: '?', color, id: nextId++ });
+    renderTiers();
+  }
+
+  // ── Save items from DOM back into saved map (for re-renders) ──
+  // Not needed separately — renderTiers reads from DOM directly via saved{}
+
+  // ── Color picker ──
+  const pickerEl = document.getElementById('color-picker');
+
+  COLOR_PALETTE.forEach(color => {
+    const swatch = document.createElement('div');
+    swatch.className = 'color-swatch';
+    swatch.style.background = color;
+    swatch.addEventListener('click', () => applyColor(color));
+    pickerEl.appendChild(swatch);
+  });
+
+  function showColorPicker(tierId, labelEl) {
+    colorTargetId = tierId;
+    const rect = labelEl.getBoundingClientRect();
+    pickerEl.style.top = (rect.bottom + 6 + window.scrollY) + 'px';
+    pickerEl.style.left = rect.left + 'px';
+    pickerEl.classList.add('visible');
+  }
+
+  function applyColor(color) {
+    const tier = tiers.find(t => t.id === colorTargetId);
+    if (!tier) return;
+    tier.color = color;
+    const label = document.querySelector(`.tier-row[data-tier-id="${colorTargetId}"] .tier-label`);
+    if (label) {
+      label.style.background = color;
+      if (isLight(color)) { label.style.color = '#111'; label.dataset.light = 'true'; }
+      else { label.style.color = '#fff'; label.dataset.light = 'false'; }
+    }
+    pickerEl.classList.remove('visible');
+    colorTargetId = null;
+  }
+
+  document.addEventListener('click', e => {
+    if (!pickerEl.contains(e.target) && !e.target.classList.contains('tier-label')) {
+      pickerEl.classList.remove('visible');
+      colorTargetId = null;
+    }
+  });
+
+  // ── Init SortableJS on all tier zones + pool ──
+  function initSortables() {
+    sortables.forEach(s => s.destroy());
+    sortables = [];
+
+    const zones = [
+      ...document.querySelectorAll('.tier-items'),
+      document.getElementById('pool')
+    ];
+
+    zones.forEach(el => {
+      sortables.push(Sortable.create(el, {
+        group: 'tierlist',
+        animation: 150,
+        ghostClass: 'sortable-ghost',
+        chosenClass: 'sortable-chosen',
+      }));
+    });
+  }
+
+  // ── Avatar tile ──
+  function makeTile(member) {
+    const tile = document.createElement('div');
+    tile.className = 'avatar-tile';
+    tile.dataset.id = member.id;
+
+    const img = document.createElement('img');
+    img.src = member.avatarUrl;
+    img.alt = member.displayName;
+    img.title = member.displayName;
+    img.loading = 'lazy';
+    img.onerror = () => {
+      img.onerror = null;
+      const idx = Number(BigInt(member.id) >> 22n) % 6;
+      img.src = `https://cdn.discordapp.com/embed/avatars/${idx}.png`;
+    };
+
+    const name = document.createElement('span');
+    name.textContent = member.displayName;
+
+    tile.appendChild(img);
+    tile.appendChild(name);
+    return tile;
+  }
+
+  function populatePool(members) {
+    const pool = document.getElementById('pool');
+    pool.innerHTML = '';
+    members.forEach(m => pool.appendChild(makeTile(m)));
+  }
+
+  function resetAll() {
+    const pool = document.getElementById('pool');
+    document.querySelectorAll('.tier-items').forEach(zone => {
+      Array.from(zone.children).forEach(tile => pool.appendChild(tile));
+    });
+  }
+
+  // ── Load members ──
+  async function loadMembers() {
+    const token = document.getElementById('token-input').value.trim();
+    const guildId = document.getElementById('guild-input').value.trim();
+    const errEl = document.getElementById('error-msg');
+    const spinner = document.getElementById('spinner');
+    const btn = document.getElementById('load-btn');
+
+    errEl.style.display = 'none';
+    if (!token || !guildId) {
+      errEl.textContent = 'Please fill in both fields.';
+      errEl.style.display = 'block';
+      return;
+    }
+
+    btn.disabled = true;
+    spinner.style.display = 'block';
+    spinner.textContent = 'Validating token…';
+
+    try {
+      const tokenRes = await fetch('/api/test-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token })
+      });
+      const tokenData = await tokenRes.json();
+      if (!tokenRes.ok) {
+        throw new Error('Invalid bot token. Go to Discord Developer Portal → your app → Bot → Reset Token, copy the new one, and paste it here.');
+      }
+
+      spinner.textContent = `Token OK (bot: ${tokenData.username}). Loading members…`;
+
+      const res = await fetch('/api/members', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, guildId })
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        if (res.status === 403) throw new Error('Bot is not in this server, or Server Members Intent is disabled in the Developer Portal.');
+        throw new Error(data.error || 'Unknown error');
+      }
+
+      allMembers = data;
+      populatePool(data);
+      renderTiers();
+
+      document.getElementById('setup').style.display = 'none';
+      document.getElementById('main').style.display = 'block';
+    } catch (err) {
+      errEl.textContent = `Error: ${err.message}`;
+      errEl.style.display = 'block';
+    } finally {
+      btn.disabled = false;
+      spinner.style.display = 'none';
+      spinner.textContent = 'Loading members…';
+    }
+  }
+
+  // ── Save / Download (hide controls col during capture) ──
+  async function saveTierlist() {
+    const btn = document.getElementById('save-btn');
+    const ctrlCol = document.getElementById('controls-col');
+    const addBtn = document.getElementById('add-row-btn');
+    const tierlist = document.getElementById('tierlist');
+
+    btn.textContent = 'Generating…';
+    btn.disabled = true;
+    ctrlCol.style.display = 'none';
+    addBtn.style.display = 'none';
+    tierlist.style.borderRadius = '12px';
+
+    try {
+      const canvas = await html2canvas(tierlist, {
+        backgroundColor: '#1a1a2e',
+        scale: 2,
+        useCORS: true,
+        allowTaint: false,
+        logging: false,
+      });
+
+      const link = document.createElement('a');
+      link.download = 'tierlist.png';
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    } catch (err) {
+      alert('Could not export image: ' + err.message);
+    } finally {
+      ctrlCol.style.display = '';
+      addBtn.style.display = '';
+      tierlist.style.borderRadius = '';
+      btn.textContent = 'Save / Download';
+      btn.disabled = false;
+    }
+  }
+
+  // ── Export tierlist state as JSON ──
+  function exportData() {
+    const membersMap = {};
+    allMembers.forEach(m => { membersMap[m.id] = m; });
+
+    const tiersData = tiers.map(tier => {
+      const zone = document.querySelector(`.tier-items[data-tier-id="${tier.id}"]`);
+      const memberIds = zone ? Array.from(zone.children).map(el => el.dataset.id) : [];
+      return { label: tier.label, color: tier.color, memberIds };
+    });
+
+    const poolIds = Array.from(document.getElementById('pool').children).map(el => el.dataset.id);
+
+    const payload = {
+      version: 1,
+      savedAt: new Date().toISOString(),
+      members: membersMap,
+      tiers: tiersData,
+      pool: poolIds,
+    };
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const link = document.createElement('a');
+    link.download = 'tierlist-data.json';
+    link.href = URL.createObjectURL(blob);
+    link.click();
+    URL.revokeObjectURL(link.href);
+  }
+
+  // ── Load tierlist state from JSON file ──
+  function loadFromFile(file) {
+    const reader = new FileReader();
+    reader.onload = e => {
+      try {
+        const data = JSON.parse(e.target.result);
+        if (data.version !== 1) throw new Error('Unrecognised file format.');
+
+        // Rebuild allMembers
+        allMembers = Object.values(data.members);
+
+        // Restore tiers state
+        tiers = data.tiers.map((t, i) => ({ label: t.label, color: t.color, id: i }));
+        nextId = tiers.length;
+
+        // Render empty rows first
+        renderTiers();
+
+        // Place members into their tiers
+        data.tiers.forEach((t, i) => {
+          const zone = document.querySelector(`.tier-items[data-tier-id="${i}"]`);
+          if (!zone) return;
+          t.memberIds.forEach(id => {
+            const member = data.members[id];
+            if (member) zone.appendChild(makeTile(member));
+          });
+        });
+
+        // Place pool members
+        const pool = document.getElementById('pool');
+        data.pool.forEach(id => {
+          const member = data.members[id];
+          if (member) pool.appendChild(makeTile(member));
+        });
+
+        // Re-init sortable so new tiles are draggable
+        initSortables();
+
+        document.getElementById('setup').style.display = 'none';
+        document.getElementById('main').style.display = 'block';
+      } catch (err) {
+        alert('Could not load file: ' + err.message);
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  // ── Events ──
+  document.getElementById('load-btn').addEventListener('click', loadMembers);
+  document.getElementById('save-btn').addEventListener('click', saveTierlist);
+  document.getElementById('export-data-btn').addEventListener('click', exportData);
+  document.getElementById('reset-btn').addEventListener('click', resetAll);
+  document.getElementById('add-row-btn').addEventListener('click', addRow);
+
+  document.getElementById('file-load-btn').addEventListener('click', () => {
+    document.getElementById('file-input').click();
+  });
+  document.getElementById('file-input').addEventListener('change', e => {
+    if (e.target.files[0]) loadFromFile(e.target.files[0]);
+    e.target.value = ''; // reset so same file can be re-selected
+  });
+
+  ['token-input', 'guild-input'].forEach(id => {
+    document.getElementById(id).addEventListener('keydown', e => {
+      if (e.key === 'Enter') loadMembers();
+    });
+  });
+</script>
+</body>
+</html>
